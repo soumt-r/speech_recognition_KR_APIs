@@ -636,7 +636,7 @@ class Recognizer(AudioSource):
 
         return b"".join(frames), elapsed_time
 
-    def listen(self, source, timeout=None, phrase_time_limit=None, snowboy_configuration=None):
+    def listen(self, source, timeout=None, phrase_time_limit=None, snowboy_configuration=None, stopper=None):
         """
         Records a single phrase from ``source`` (an ``AudioSource`` instance) into an ``AudioData`` instance, which it returns.
 
@@ -676,6 +676,8 @@ class Recognizer(AudioSource):
                     elapsed_time += seconds_per_buffer
                     if timeout and elapsed_time > timeout:
                         raise WaitTimeoutError("listening timed out while waiting for phrase to start")
+                    elif stopper and stopper.is_set():
+                        raise StopperSet()
 
                     buffer = source.stream.read(source.CHUNK)
                     if len(buffer) == 0: break  # reached end of the stream
@@ -708,6 +710,8 @@ class Recognizer(AudioSource):
                 elapsed_time += seconds_per_buffer
                 if phrase_time_limit and elapsed_time - phrase_start_time > phrase_time_limit:
                     break
+                elif stopper and stopper.is_set():
+                    raise StopperSet()
 
                 buffer = source.stream.read(source.CHUNK)
                 if len(buffer) == 0: break  # reached end of the stream
