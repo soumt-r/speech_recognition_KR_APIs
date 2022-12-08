@@ -1726,6 +1726,45 @@ class Recognizer(AudioSource):
         
         return finalRecognition
 
+    def recognize_etri(self, audio_data, accessKey, language='english'):
+        """
+        Performs speech recognition on ``audio_data`` (an ``AudioData`` instance), using ETRI Speech Recognition API.
+        
+        The recognition language is determined by ``language``, an uncapitalized full language name like "english" or "korean". See the full language list at https://aiopen.etri.re.kr/guide_recognition.php
+
+        You can get your Access Key from https://aiopen.etri.re.kr/keyCreation
+        """
+        assert isinstance(audio_data, AudioData), "Data must be audio data"
+        assert accessKey, "Access Key is required"
+
+        import requests
+        import json
+        import base64
+        
+        url = "http://aiopen.etri.re.kr:8000/WiseASR/Recognition"
+        audioContents = base64.b64encode(audio_data.get_raw_data(convert_rate=16000)).decode('utf8')
+
+        requestHeaders = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": accessKey
+        }
+        requestJson = {
+            "argument": {
+                "language_code": language,
+                "audio": audioContents
+            }
+        }
+        
+        response = requests.post(url, data=json.dumps(requestJson), headers=requestHeaders)
+        data = json.loads(response.content)
+        
+        if "result" in data and data["result"] == -1:
+            raise RequestError("API request failed: {}".format(data["reason"]))
+        elif "result" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+
+        return data['return_object']['recognized']
+
 def get_flac_converter():
     """Returns the absolute path of a FLAC converter executable, or raises an OSError if none can be found."""
     flac_converter = shutil_which("flac")  # check for installed version first
