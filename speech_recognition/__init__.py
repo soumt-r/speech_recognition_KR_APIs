@@ -29,7 +29,7 @@ except (ModuleNotFoundError, ImportError):
     pass
 
 __author__ = "Anthony Zhang (Uberi)"
-__version__ = "3.9.0"
+__version__ = "3.9.0_SmtCustom"
 __license__ = "BSD"
 
 try:  # attempt to use the Python 2 modules
@@ -42,6 +42,9 @@ except ImportError:  # use the Python 3 modules
 
 
 class WaitTimeoutError(Exception): pass
+
+
+class StopperSet(Exception): pass
 
 
 class RequestError(Exception): pass
@@ -1764,6 +1767,127 @@ class Recognizer(AudioSource):
             raise UnknownValueError("API returned an unknown value: {}".format(data))
 
         return data['return_object']['recognized']
+    
+    def recognize_clova(self, audio_data, ClientID, ClientSecret, lang="Kor"):
+        """
+        Performs speech recognition on ``audio_data`` (an ``AudioData`` instance), using Naver Clova Speech Recognition API.
+        
+        The recognition language is determined by ``lang``, an uncapitalized full language name like "Kor" or "Jpn". 
+
+        You can get your Client ID and Client Secret from https://www.ncloud.com/product/aiService/csr
+        """
+        assert isinstance(audio_data, AudioData), "Data must be audio data"
+        assert ClientID, "Client ID is required"
+        assert ClientSecret, "Client Secret is required"
+
+        import requests
+        import json
+        
+        url = "https://naveropenapi.apigw.ntruss.com/recog/v1/stt?lang=" + lang
+        audioContents = audio_data.get_raw_data()
+
+        requestHeaders = {
+            "Content-Type": "application/octet-stream",
+            "X-NCP-APIGW-API-KEY-ID": ClientID,
+            "X-NCP-APIGW-API-KEY": ClientSecret
+        }
+        
+        response = requests.post(url, data=audioContents, headers=requestHeaders)
+        data = json.loads(response.content)
+        
+        if "error" in data:
+            raise RequestError("API request failed: {}".format(data["error"]))
+        elif "text" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+
+        return data['text'] 
+    
+    def recognize_vito(self, audio_data, ClientID, ClientSecret, use_itn=False, use_disfluency_filter=False, use_profanity_filter=False):
+        """
+        Performs speech recognition on ``audio_data`` (an ``AudioData`` instance), using Vito Speech Recognition API.
+
+        This API only supports Korean language.
+
+        You can get your Client ID and Client Secret from https://vito.ai/
+        """
+        assert isinstance(audio_data, AudioData), "Data must be audio data"
+        assert ClientID, "Client ID is required"
+        assert ClientSecret, "Client Secret is required"
+
+        import requests
+        import json
+        from io import BytesIO
+        
+        jwt_url = "https://openapi.vito.ai/v1/authenticate"
+        url = "https://openapi.vito.ai/v1/transcribe"
+
+        # Get JWT Token
+        requestHeaders = {
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        requestData = {
+            "client_id": ClientID,
+            "client_secret": ClientSecret
+        }
+        response = requests.post(jwt_url, data=requestData, headers=requestHeaders)
+        data = json.loads(response.content)
+        
+        if "code" in data:
+            raise RequestError("API request failed: {}".format(data["code"]))
+        elif "access_token" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+        
+        # Get Recognition Result
+        requestHeaders = {
+            "Authorization": "Bearer " + data["access_token"]
+        }
+
+        config = {
+            "diarization": {
+                "use_verification": False
+            },
+            "use_multi_channel": False,
+
+            "use_itn": use_itn,
+            "use_disfluency_filter": use_disfluency_filter,
+            "use_profanity_filter": use_profanity_filter
+        }
+
+        response = requests.post(url, headers=requestHeaders, data={"config" : json.dumps(config)}, files={"file" : BytesIO(audio_data.get_wav_data())})
+        data = json.loads(response.content)
+
+        if "code" in data:
+            raise RequestError("API request failed: {}".format(data["code"]))
+        elif "id" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+        
+        polling_url = "https://openapi.vito.ai/v1/transcribe/" + data["id"]
+        while True:
+            response = requests.get(polling_url, headers=requestHeaders)
+            data = json.loads(response.content)
+            if "code" in data:
+                raise RequestError("API request failed: {}".format(data["code"]))
+            elif "status" not in data:
+                raise UnknownValueError("API returned an unknown value: {}".format(data))
+            elif data["status"] == "completed":
+                break
+            else:
+                time.sleep(3)
+        
+        text = ""
+        for result in data["results"]["utterances"]:
+            text += result["msg"] + " "
+        
+        return text
+        
+        
+
+            
+
+
+
+
+
 
 def get_flac_converter():
     """Returns the absolute path of a FLAC converter executable, or raises an OSError if none can be found."""
