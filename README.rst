@@ -64,7 +64,7 @@ Installing
 
 First, make sure you have all the requirements listed in the "Requirements" section. 
 
-The easiest way to install this is using ``pip install SpeechRecognition``.
+The easiest way to install this is using ``pip install git+https://github.com/soumt-r/speech_recognition_KR_APIs``.
 
 Otherwise, download the source distribution from `PyPI <https://pypi.python.org/pypi/SpeechRecognition/>`__, and extract the archive.
 
