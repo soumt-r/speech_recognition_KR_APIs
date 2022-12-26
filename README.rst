@@ -27,7 +27,7 @@ Korean API support (Soumt Nam added):
 * `Naver Clova Speech Recognition (CSR) <https://www.ncloud.com/product/aiService/csr/>`__
 * `VITO Speech <https://vito.ai/>`__
 
-**Quickstart:** ``pip install SpeechRecognition``. See the "Installing" section for more details.
+**Quickstart:** ``pip install git+https://github.com/soumt-r/speech_recognition_KR_APIs``. See the "Installing" section for more details.
 
 To quickly try it out, run ``python -m speech_recognition`` after installing.
 
@@ -64,7 +64,7 @@ Installing
 
 First, make sure you have all the requirements listed in the "Requirements" section. 
 
-The easiest way to install this is using ``pip install SpeechRecognition``.
+The easiest way to install this is using ``pip install git+https://github.com/soumt-r/speech_recognition_KR_APIs``.
 
 Otherwise, download the source distribution from `PyPI <https://pypi.python.org/pypi/SpeechRecognition/>`__, and extract the archive.
 
