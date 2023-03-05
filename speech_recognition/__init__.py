@@ -32,13 +32,9 @@ __author__ = "Anthony Zhang (Uberi)"
 __version__ = "3.9.0_SmtCustom"
 __license__ = "BSD"
 
-try:  # attempt to use the Python 2 modules
-    from urllib import urlencode
-    from urllib2 import Request, urlopen, URLError, HTTPError
-except ImportError:  # use the Python 3 modules
-    from urllib.parse import urlencode
-    from urllib.request import Request, urlopen
-    from urllib.error import URLError, HTTPError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 
 
 class WaitTimeoutError(Exception): pass
@@ -176,7 +172,7 @@ class Microphone(AudioSource):
 
                 # compute RMS of debiased audio
                 energy = -audioop.rms(buffer, 2)
-                energy_bytes = chr(energy & 0xFF) + chr((energy >> 8) & 0xFF) if bytes is str else bytes([energy & 0xFF, (energy >> 8) & 0xFF])  # Python 2 compatibility
+                energy_bytes = bytes([energy & 0xFF, (energy >> 8) & 0xFF])
                 debiased_energy = audioop.rms(audioop.add(buffer, energy_bytes * (len(buffer) // 2), 2), 2)
 
                 if debiased_energy > 30:  # probably actually audio
@@ -908,16 +904,12 @@ class Recognizer(AudioSource):
         except URLError as e:
             raise RequestError("recognition connection failed: {}".format(e.reason))
         response_text = response.read().decode("utf-8")
-        # print('response_text:')
-        # pprint(response_text, indent=4)
 
         # ignore any blank blocks
         actual_result = []
         for line in response_text.split("\n"):
             if not line: continue
-            result = json.loads(line)["result"]            
-            # print('result1:')
-            # pprint(result, indent=4)
+            result = json.loads(line)["result"]
             if len(result) != 0:
                 actual_result = result[0]
                 break
@@ -925,8 +917,7 @@ class Recognizer(AudioSource):
         # return results
         if show_all:
             return actual_result
-        print('result2:')
-        pprint(actual_result, indent=4)
+
         if not isinstance(actual_result, dict) or len(actual_result.get("alternative", [])) == 0: raise UnknownValueError()
 
         if "confidence" in actual_result["alternative"]:
@@ -1076,11 +1067,8 @@ class Recognizer(AudioSource):
         try:
             from time import monotonic  # we need monotonic time to avoid being affected by system clock changes, but this is only available in Python 3.3+
         except ImportError:
-            try:
-                from monotonic import monotonic  # use time.monotonic backport for Python 2 if available (from https://pypi.python.org/pypi/monotonic)
-            except (ImportError, RuntimeError):
-                expire_time = None  # monotonic time not available, don't cache access tokens
-                allow_caching = False  # don't allow caching, since monotonic time isn't available
+            expire_time = None  # monotonic time not available, don't cache access tokens
+            allow_caching = False  # don't allow caching, since monotonic time isn't available
         if expire_time is None or monotonic() > expire_time:  # caching not enabled, first credential request, or the access token from the previous one expired
             # get an access token using OAuth
             credential_url = "https://" + location + ".api.cognitive.microsoft.com/sts/v1.0/issueToken"
@@ -1142,8 +1130,6 @@ class Recognizer(AudioSource):
         result = json.loads(response_text)
 
         # return results
-        print('result:')
-        pprint(result, indent=4)
         if show_all:
             return result
         if "RecognitionStatus" not in result or result["RecognitionStatus"] != "Success" or "NBest" not in result:
@@ -1173,11 +1159,8 @@ class Recognizer(AudioSource):
         try:
             from time import monotonic  # we need monotonic time to avoid being affected by system clock changes, but this is only available in Python 3.3+
         except ImportError:
-            try:
-                from monotonic import monotonic  # use time.monotonic backport for Python 2 if available (from https://pypi.python.org/pypi/monotonic)
-            except (ImportError, RuntimeError):
-                expire_time = None  # monotonic time not available, don't cache access tokens
-                allow_caching = False  # don't allow caching, since monotonic time isn't available
+            expire_time = None  # monotonic time not available, don't cache access tokens
+            allow_caching = False  # don't allow caching, since monotonic time isn't available
         if expire_time is None or monotonic() > expire_time:  # caching not enabled, first credential request, or the access token from the previous one expired
             # get an access token using OAuth
             credential_url = "https://api.cognitive.microsoft.com/sts/v1.0/issueToken"
@@ -1326,8 +1309,6 @@ class Recognizer(AudioSource):
 
         # return results
         if show_all: return result
-        print('result:')
-        pprint(result, indent=4)
         if "Disambiguation" not in result or result["Disambiguation"] is None:
             raise UnknownValueError()
         return result['Disambiguation']['ChoiceData'][0]['Transcription'], result['Disambiguation']['ChoiceData'][0]['ConfidenceScore']
@@ -1416,8 +1397,6 @@ class Recognizer(AudioSource):
                     raise
             
             job = status['TranscriptionJob']
-            print('status0:')
-            pprint(status, indent=4)
             if job['TranscriptionJobStatus'] in ['COMPLETED'] and 'TranscriptFileUri' in job['Transcript']:
 
                 # Retrieve transcription JSON containing transcript.
@@ -1425,8 +1404,6 @@ class Recognizer(AudioSource):
                 import urllib.request, json
                 with urllib.request.urlopen(transcript_uri) as json_data:
                     d = json.load(json_data)
-                    print('result:')
-                    pprint(d, indent=4)
                     confidences = []
                     for item in d['results']['items']:
                         confidences.append(float(item['alternatives'][0]['confidence']))
@@ -1527,7 +1504,6 @@ class Recognizer(AudioSource):
             }
             response = requests.get(endpoint, headers=headers)
             data = response.json()
-            print('Raw response: %s' % data)
             status = data['status']
 
             if status == 'error':
@@ -1554,9 +1530,7 @@ class Recognizer(AudioSource):
             response = requests.post('https://api.assemblyai.com/v2/upload',
                                      headers=headers,
                                      data=read_file(audio_data))
-            print(response.json())
             upload_url = response.json()['upload_url']
-            print('upload_url:', upload_url)
 
             # Queue file for transcription.
             endpoint = "https://api.assemblyai.com/v2/transcript"
@@ -1569,7 +1543,6 @@ class Recognizer(AudioSource):
             }
             response = requests.post(endpoint, json=json, headers=headers)
             data = response.json()
-            print(data)
             transciption_id = data['id']
             exc = TranscriptionNotReady()
             exc.job_name = transciption_id
@@ -1616,8 +1589,6 @@ class Recognizer(AudioSource):
         # return results
         if show_all:
             return result
-        print('result:')
-        pprint(result, indent=4)
         if "results" not in result or len(result["results"]) < 1 or "alternatives" not in result["results"][0]:
             raise UnknownValueError()
 
@@ -1695,6 +1666,8 @@ class Recognizer(AudioSource):
         """
 
         assert isinstance(audio_data, AudioData), "Data must be audio data"
+        import numpy as np
+        import soundfile as sf
         import torch
         import whisper
 
@@ -1702,16 +1675,19 @@ class Recognizer(AudioSource):
             self.whisper_model = getattr(self, "whisper_model", {})
             self.whisper_model[model] = whisper.load_model(model, **load_options or {})
 
-        with tempfile.NamedTemporaryFile(suffix=".wav") as f:
-            f.write(audio_data.get_wav_data())
-            f.flush()
-            result = self.whisper_model[model].transcribe(
-                f.name,
-                language=language,
-                task="translate" if translate else None,
-                fp16=torch.cuda.is_available(),
-                **transcribe_options
-            )
+        # 16 kHz https://github.com/openai/whisper/blob/28769fcfe50755a817ab922a7bc83483159600a9/whisper/audio.py#L98-L99
+        wav_bytes = audio_data.get_wav_data(convert_rate=16000)
+        wav_stream = io.BytesIO(wav_bytes)
+        audio_array, sampling_rate = sf.read(wav_stream)
+        audio_array = audio_array.astype(np.float32)
+
+        result = self.whisper_model[model].transcribe(
+            audio_array,
+            language=language,
+            task="translate" if translate else None,
+            fp16=torch.cuda.is_available(),
+            **transcribe_options
+        )
 
         if show_dict:
             return result
@@ -1946,7 +1922,6 @@ class PortableNamedTemporaryFile(object):
 
     def __enter__(self):
         # create the temporary file and open it
-        import tempfile
         file_descriptor, file_path = tempfile.mkstemp()
         self._file = os.fdopen(file_descriptor, self.mode)
 
