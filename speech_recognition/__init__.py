@@ -1782,7 +1782,7 @@ class Recognizer(AudioSource):
         import json
         
         url = "https://naveropenapi.apigw.ntruss.com/recog/v1/stt?lang=" + lang
-        audioContents = audio_data.get_raw_data()
+        audioContents = audio_data.get_wav_data(convert_rate=16000)
 
         requestHeaders = {
             "Content-Type": "application/octet-stream",
