@@ -87,3 +87,11 @@ except sr.UnknownValueError:
     print("IBM Speech to Text could not understand audio")
 except sr.RequestError as e:
     print("Could not request results from IBM Speech to Text service; {0}".format(e))
+
+ETRI_AccessKey = "INSERT ETRI ACCESS KEY HERE"
+try:
+    print("ETRI thinks you said " + r.recognize_etri(audio, ETRI_AccessKey))
+except sr.UnknownValueError:
+    print("ETRI could not understand audio")
+except sr.RequestError as e:
+    print("Could not request results from ETRI service; {0}".format(e))

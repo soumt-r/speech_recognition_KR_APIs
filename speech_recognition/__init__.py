@@ -26,7 +26,8 @@ except (ModuleNotFoundError, ImportError):
     pass
 
 __author__ = "Anthony Zhang (Uberi)"
-__version__ = "3.10.0"
+
+__version__ = "3.10.0_SmtCustom"
 __license__ = "BSD"
 
 from urllib.parse import urlencode
@@ -42,6 +43,23 @@ from .exceptions import (
     WaitTimeoutError,
 )
 from .recognizers import whisper
+
+class WaitTimeoutError(Exception): pass
+
+
+class StopperSet(Exception): pass
+
+
+class RequestError(Exception): pass
+
+
+class UnknownValueError(Exception): pass
+
+
+class TranscriptionNotReady(Exception): pass
+
+
+class TranscriptionFailed(Exception): pass
 
 
 class AudioSource(object):
@@ -129,7 +147,21 @@ class Microphone(AudioSource):
         finally:
             audio.terminate()
         return result
-
+    
+    @staticmethod
+    def list_usable_microphones():
+        p= Microphone.get_pyaudio().PyAudio()
+        info = p.get_host_api_info_by_index(0)
+        try:
+            result = []
+            for i in range(0, info.get('deviceCount')):
+                if (p.get_device_info_by_host_api_device_index(0, i).get('maxInputChannels')) > 0:
+                    device_info = p.get_device_info_by_index(i)
+                    result.append(device_info.get("name"))
+        finally:
+            p.terminate()
+        return result
+    
     @staticmethod
     def list_working_microphones():
         """
@@ -447,7 +479,7 @@ class Recognizer(AudioSource):
 
         return b"".join(frames), elapsed_time
 
-    def listen(self, source, timeout=None, phrase_time_limit=None, snowboy_configuration=None):
+    def listen(self, source, timeout=None, phrase_time_limit=None, snowboy_configuration=None, stopper=None, ptt_end=None):
         """
         Records a single phrase from ``source`` (an ``AudioSource`` instance) into an ``AudioData`` instance, which it returns.
 
@@ -487,6 +519,10 @@ class Recognizer(AudioSource):
                     elapsed_time += seconds_per_buffer
                     if timeout and elapsed_time > timeout:
                         raise WaitTimeoutError("listening timed out while waiting for phrase to start")
+                    elif stopper and stopper.is_set():
+                        raise StopperSet()
+                    elif ptt_end and ptt_end.is_set():
+                        break
 
                     buffer = source.stream.read(source.CHUNK)
                     if len(buffer) == 0: break  # reached end of the stream
@@ -518,6 +554,10 @@ class Recognizer(AudioSource):
                 # handle phrase being too long by cutting off the audio
                 elapsed_time += seconds_per_buffer
                 if phrase_time_limit and elapsed_time - phrase_start_time > phrase_time_limit:
+                    break
+                elif stopper and stopper.is_set():
+                    raise StopperSet()
+                elif ptt_end and ptt_end.is_set():
                     break
 
                 buffer = source.stream.read(source.CHUNK)
@@ -1521,7 +1561,207 @@ class Recognizer(AudioSource):
         
         return finalRecognition
 
+    def recognize_etri(self, audio_data, accessKey, language='english'):
+        """
+        Performs speech recognition on ``audio_data`` (an ``AudioData`` instance), using ETRI Speech Recognition API.
+        
+        The recognition language is determined by ``language``, an uncapitalized full language name like "english" or "korean". See the full language list at https://aiopen.etri.re.kr/guide_recognition.php
 
+        You can get your Access Key from https://aiopen.etri.re.kr/keyCreation
+        """
+        assert isinstance(audio_data, AudioData), "Data must be audio data"
+        assert accessKey, "Access Key is required"
+
+        import requests
+        import json
+        import base64
+        
+        url = "http://aiopen.etri.re.kr:8000/WiseASR/Recognition"
+        audioContents = base64.b64encode(audio_data.get_raw_data(convert_rate=16000)).decode('utf8')
+
+        requestHeaders = {
+            "Content-Type": "application/json; charset=utf-8",
+            "Authorization": accessKey
+        }
+        requestJson = {
+            "argument": {
+                "language_code": language,
+                "audio": audioContents
+            }
+        }
+        
+        response = requests.post(url, data=json.dumps(requestJson), headers=requestHeaders)
+        data = json.loads(response.content)
+        
+        if "result" in data and data["result"] == -1:
+            raise RequestError("API request failed: {}".format(data["reason"]))
+        elif "result" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+
+        return data['return_object']['recognized']
+    
+    def recognize_clova(self, audio_data, ClientID, ClientSecret, lang="Kor"):
+        """
+        Performs speech recognition on ``audio_data`` (an ``AudioData`` instance), using Naver Clova Speech Recognition API.
+        
+        The recognition language is determined by ``lang``, an uncapitalized full language name like "Kor" or "Jpn". 
+
+        You can get your Client ID and Client Secret from https://www.ncloud.com/product/aiService/csr
+        """
+        assert isinstance(audio_data, AudioData), "Data must be audio data"
+        assert ClientID, "Client ID is required"
+        assert ClientSecret, "Client Secret is required"
+
+        import requests
+        import json
+        
+        url = "https://naveropenapi.apigw.ntruss.com/recog/v1/stt?lang=" + lang
+        audioContents = audio_data.get_wav_data(convert_rate=16000)
+
+        requestHeaders = {
+            "Content-Type": "application/octet-stream",
+            "X-NCP-APIGW-API-KEY-ID": ClientID,
+            "X-NCP-APIGW-API-KEY": ClientSecret
+        }
+        
+        response = requests.post(url, data=audioContents, headers=requestHeaders)
+        data = json.loads(response.content)
+        
+        if "error" in data:
+            raise RequestError("API request failed: {}".format(data["error"]))
+        elif "text" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+
+        return data['text'] 
+    
+    def recognize_vito(self, audio_data, ClientID, ClientSecret, use_itn=False, use_disfluency_filter=False, use_profanity_filter=False):
+        """
+        Performs speech recognition on ``audio_data`` (an ``AudioData`` instance), using Vito Speech Recognition API.
+
+        This API only supports Korean language.
+
+        You can get your Client ID and Client Secret from https://vito.ai/
+        """
+        assert isinstance(audio_data, AudioData), "Data must be audio data"
+        assert ClientID, "Client ID is required"
+        assert ClientSecret, "Client Secret is required"
+
+        import requests
+        import json
+        from io import BytesIO
+        
+        jwt_url = "https://openapi.vito.ai/v1/authenticate"
+        url = "https://openapi.vito.ai/v1/transcribe"
+
+        # Get JWT Token
+        requestHeaders = {
+            "Content-Type": "application/x-www-form-urlencoded",
+        }
+        requestData = {
+            "client_id": ClientID,
+            "client_secret": ClientSecret
+        }
+        response = requests.post(jwt_url, data=requestData, headers=requestHeaders)
+        data = json.loads(response.content)
+        
+        if "code" in data:
+            raise RequestError("API request failed: {}".format(data["code"]))
+        elif "access_token" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+        
+        # Get Recognition Result
+        requestHeaders = {
+            "Authorization": "Bearer " + data["access_token"]
+        }
+
+        config = {
+            "diarization": {
+                "use_verification": False
+            },
+            "use_multi_channel": False,
+
+            "use_itn": use_itn,
+            "use_disfluency_filter": use_disfluency_filter,
+            "use_profanity_filter": use_profanity_filter
+        }
+
+        response = requests.post(url, headers=requestHeaders, data={"config" : json.dumps(config)}, files={"file" : BytesIO(audio_data.get_wav_data())})
+        data = json.loads(response.content)
+
+        if "code" in data:
+            raise RequestError("API request failed: {}".format(data["code"]))
+        elif "id" not in data:
+            raise UnknownValueError("API returned an unknown value: {}".format(data))
+        
+        polling_url = "https://openapi.vito.ai/v1/transcribe/" + data["id"]
+        while True:
+            response = requests.get(polling_url, headers=requestHeaders)
+            data = json.loads(response.content)
+            if "code" in data:
+                raise RequestError("API request failed: {}".format(data["code"]))
+            elif "status" not in data:
+                raise UnknownValueError("API returned an unknown value: {}".format(data))
+            elif data["status"] == "completed":
+                break
+            else:
+                time.sleep(3)
+        
+        text = ""
+        for result in data["results"]["utterances"]:
+            text += result["msg"] + " "
+        
+        return text
+        
+        
+
+            
+
+
+
+
+
+
+def get_flac_converter():
+    """Returns the absolute path of a FLAC converter executable, or raises an OSError if none can be found."""
+    flac_converter = shutil_which("flac")  # check for installed version first
+    if flac_converter is None:  # flac utility is not installed
+        base_path = os.path.dirname(os.path.abspath(__file__))  # directory of the current module file, where all the FLAC bundled binaries are stored
+        system, machine = platform.system(), platform.machine()
+        if system == "Windows" and machine in {"i686", "i786", "x86", "x86_64", "AMD64"}:
+            flac_converter = os.path.join(base_path, "flac-win32.exe")
+        elif system == "Darwin" and machine in {"i686", "i786", "x86", "x86_64", "AMD64"}:
+            flac_converter = os.path.join(base_path, "flac-mac")
+        elif system == "Linux" and machine in {"i686", "i786", "x86"}:
+            flac_converter = os.path.join(base_path, "flac-linux-x86")
+        elif system == "Linux" and machine in {"x86_64", "AMD64"}:
+            flac_converter = os.path.join(base_path, "flac-linux-x86_64")
+        else:  # no FLAC converter available
+            raise OSError("FLAC conversion utility not available - consider installing the FLAC command line application by running `apt-get install flac` or your operating system's equivalent")
+
+    # mark FLAC converter as executable if possible
+    try:
+        # handle known issue when running on docker:
+        # run executable right after chmod() may result in OSError "Text file busy"
+        # fix: flush FS with sync
+        if not os.access(flac_converter, os.X_OK):
+            stat_info = os.stat(flac_converter)
+            os.chmod(flac_converter, stat_info.st_mode | stat.S_IEXEC)
+            if 'Linux' in platform.system():
+                os.sync() if sys.version_info >= (3, 3) else os.system('sync')
+
+    except OSError: pass
+
+    return flac_converter
+
+
+def shutil_which(pgm):
+    """Python 2 compatibility: backport of ``shutil.which()`` from Python 3"""
+    path = os.getenv('PATH')
+    for p in path.split(os.path.pathsep):
+        p = os.path.join(p, pgm)
+        if os.path.exists(p) and os.access(p, os.X_OK):
+            return p
+            
 class PortableNamedTemporaryFile(object):
     """Limited replacement for ``tempfile.NamedTemporaryFile``, except unlike ``tempfile.NamedTemporaryFile``, the file can be opened again while it's currently open, even on Windows."""
     def __init__(self, mode="w+b"):

@@ -1,27 +1,8 @@
 SpeechRecognition
 =================
 
-.. image:: https://img.shields.io/pypi/v/SpeechRecognition.svg
-    :target: https://pypi.python.org/pypi/SpeechRecognition/
-    :alt: Latest Version
-
-.. image:: https://img.shields.io/pypi/status/SpeechRecognition.svg
-    :target: https://pypi.python.org/pypi/SpeechRecognition/
-    :alt: Development Status
-
-.. image:: https://img.shields.io/pypi/pyversions/SpeechRecognition.svg
-    :target: https://pypi.python.org/pypi/SpeechRecognition/
-    :alt: Supported Python Versions
-
-.. image:: https://img.shields.io/pypi/l/SpeechRecognition.svg
-    :target: https://pypi.python.org/pypi/SpeechRecognition/
-    :alt: License
-
-.. image:: https://api.travis-ci.org/Uberi/speech_recognition.svg?branch=master
-    :target: https://travis-ci.org/Uberi/speech_recognition
-    :alt: Continuous Integration Test Results
-
 Library for performing speech recognition, with support for several engines and APIs, online and offline.
+Customed by Soumt to use some Korean API (Naver Clova, ETRI, ...etc)
 
 **UPDATE 2022-02-09**: Hey everyone! This project started as a tech demo, but these days it needs more time than I have to keep up with all the PRs and issues. Therefore, I'd like to put out an **open invite for collaborators** - just reach out at me@anthonyz.ca if you're interested!
 
@@ -41,7 +22,13 @@ Speech recognition engine/API support:
 * `OpenAI whisper <https://github.com/openai/whisper>`__ (works offline)
 * `Whisper API <https://platform.openai.com/docs/guides/speech-to-text>`__
 
-**Quickstart:** ``pip install SpeechRecognition``. See the "Installing" section for more details.
+Korean API support (Soumt Nam added):
+
+* `ETRI AI API <https://aiopen.etri.re.kr/guide/Recognition>`__
+* `Naver Clova Speech Recognition (CSR) <https://www.ncloud.com/product/aiService/csr/>`__
+* `VITO Speech <https://vito.ai/>`__
+
+**Quickstart:** ``pip install git+https://github.com/soumt-r/speech_recognition_KR_APIs``. See the "Installing" section for more details.
 
 To quickly try it out, run ``python -m speech_recognition`` after installing.
 
@@ -78,7 +65,7 @@ Installing
 
 First, make sure you have all the requirements listed in the "Requirements" section. 
 
-The easiest way to install this is using ``pip install SpeechRecognition``.
+The easiest way to install this is using ``pip install git+https://github.com/soumt-r/speech_recognition_KR_APIs``.
 
 Otherwise, download the source distribution from `PyPI <https://pypi.python.org/pypi/SpeechRecognition/>`__, and extract the archive.
 
